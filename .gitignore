@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+seq_master.db
+temp_p.png
+dist/
+build/
+*.spec
