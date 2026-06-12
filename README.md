@@ -24,3 +24,5 @@ Many modern bioinformatics tools are cloud-based, which poses a significant data
 * GC Content (%) & Complexity Index (Shannon Entropy)
 * Thermodynamic Melting Temperatures (Wallace & Salt-Adjusted)
 * Automated Restriction Enzyme Mapping (EcoRI, HindIII, BamHI)
+
+![SeqAnalyzer Dashboard](assets/Dashboard.png)
