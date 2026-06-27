@@ -50,12 +50,6 @@ Below is a breakdown of the core workflow within the utility:
 
 ---
 
-## 🤝 Acknowledgments
-
-A huge thank you to my project guide, **Dr. Pratima Bhagat**, for her invaluable microbiology expertise and for helping me bridge the gap between complex code and the life sciences during this capstone project.
-
----
-
 ## ⚖️ License
 
 This project is open-source and licensed under the **GNU General Public License v3.0**. 
