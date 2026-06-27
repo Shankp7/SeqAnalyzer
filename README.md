@@ -34,7 +34,7 @@ Below is a breakdown of the core workflow within the utility:
 * Select a local `.fasta` file through the dashboard file picker. The application verifies file integrity before initializing the parsing sequence to prevent runtime allocation errors.
 
 ### Step 2: Sequence Analysis
-![SeqAnalyzer Dashboard](dashboard.png)
+![SeqAnalyzer Dashboard](Dashboard.png)
 * Once processing begins, the background thread extracts key genomic metrics (such as nucleotide distribution, GC-content, and sequence lengths) while you navigate the application.
 
 ### Step 3: History & Reports
