@@ -95,7 +95,13 @@ class MainWindowUI(ctk.CTk):
         self.id_entry.pack(pady=5, padx=20)
 
         self.upload_btn = ctk.CTkButton(self.sidebar, text="Analyze Sequence", command=self.open_file_dialog)
-        self.upload_btn.pack(pady=15, padx=20)
+        self.upload_btn.pack(pady=(15, 5), padx=20)
+
+        self.fetch_ncbi_btn = ctk.CTkButton(self.sidebar, text="Fetch NCBI Sequence", command=self.fetch_from_ncbi)
+        self.fetch_ncbi_btn.pack(pady=5, padx=20)
+
+        self.batch_btn = ctk.CTkButton(self.sidebar, text="Batch Process Folder", command=self.open_batch_dialog)
+        self.batch_btn.pack(pady=5, padx=20)
 
         self.loading_bar = ctk.CTkProgressBar(self.sidebar, mode="indeterminate", height=6)
         self.loading_bar.set(0)
@@ -112,6 +118,10 @@ class MainWindowUI(ctk.CTk):
     def validate_button(self, *args):
         st = "normal" if self.name_var.get().strip() else "disabled"
         self.upload_btn.configure(state=st)
+        if hasattr(self, 'fetch_ncbi_btn'):
+            self.fetch_ncbi_btn.configure(state=st)
+        if hasattr(self, 'batch_btn'):
+            self.batch_btn.configure(state=st)
 
     def setup_dashboard_tab(self):
         self.dash_frame = self.tabs.tab("Dashboard")
@@ -227,6 +237,89 @@ Once loaded, the dashboard displays your Bio-Intelligence Summary:
         
         plt.show(block=False)
 
+    def fetch_from_ncbi(self):
+        dialog = ctk.CTkInputDialog(text="Enter NCBI Accession ID (e.g., NC_002549.1):", title="Fetch from NCBI")
+        accession_id = dialog.get_input()
+        if not accession_id:
+            return
+        
+        self.upload_btn.configure(state="disabled")
+        self.fetch_ncbi_btn.configure(state="disabled", text="Fetching...")
+        self.loading_bar.pack(pady=(0, 10), padx=20)
+        self.loading_bar.start()
+        self.status_label.configure(text=f"Fetching {accession_id}...", text_color="#f1c40f")
+
+        def fetch_thread():
+            try:
+                from Bio import Entrez
+                Entrez.email = "researcher@seqanalyzer.com"
+                handle = Entrez.efetch(db="nucleotide", id=accession_id.strip(), rettype="fasta", retmode="text")
+                fasta_data = handle.read()
+                handle.close()
+                
+                os.makedirs("downloads", exist_ok=True)
+                file_path = os.path.join("downloads", f"{accession_id.strip()}.fasta")
+                with open(file_path, "w") as f:
+                    f.write(fasta_data)
+                
+                self.thread_queue.put({"type": "fetch_success", "path": file_path})
+            except Exception as e:
+                self.thread_queue.put({"type": "fetch_error", "error": str(e)})
+
+        threading.Thread(target=fetch_thread, daemon=True).start()
+        self.check_queue()
+
+    def open_batch_dialog(self):
+        d_path = filedialog.askdirectory()
+        if not d_path: return
+        
+        valid_exts = ('.fasta', '.fa', '.fna', '.txt')
+        files = [os.path.join(d_path, f) for f in os.listdir(d_path) if f.lower().endswith(valid_exts)]
+        
+        if not files:
+            messagebox.showinfo("No Files", "No valid genomic files found in this directory.")
+            return
+
+        self.upload_btn.configure(state="disabled")
+        if hasattr(self, 'fetch_ncbi_btn'): self.fetch_ncbi_btn.configure(state="disabled")
+        if hasattr(self, 'batch_btn'): self.batch_btn.configure(state="disabled", text="Processing...")
+            
+        self.loading_bar.pack(pady=(0, 10), padx=20)
+        self.loading_bar.start()
+        self.status_label.configure(text=f"Batch Processing {len(files)} files...", text_color="#f1c40f")
+
+        def batch_thread():
+            processed_count = 0
+            errors = []
+            
+            for f_path in files:
+                try:
+                    if self.analyzer.parse_fasta(f_path):
+                        if self.analyzer.calculate_metrics():
+                            self.thread_queue.put({
+                                "type": "batch_item", 
+                                "path": f_path, 
+                                "length": self.analyzer.total_length, 
+                                "gc": self.analyzer.gc_percentage
+                            })
+                            processed_count += 1
+                        else:
+                            errors.append(f"{os.path.basename(f_path)}: Calculations failed.")
+                    else:
+                        errors.append(f"{os.path.basename(f_path)}: Invalid format.")
+                except Exception as e:
+                    errors.append(f"{os.path.basename(f_path)}: {str(e)}")
+                    
+            self.thread_queue.put({
+                "type": "batch_done", 
+                "count": processed_count, 
+                "errors": errors, 
+                "last_path": files[-1] if files else ""
+            })
+
+        threading.Thread(target=batch_thread, daemon=True).start()
+        self.check_queue()
+
     def open_file_dialog(self):
         f_path = filedialog.askopenfilename(filetypes=[
             ("Genomic Files", "*.fasta *.fa *.fna *.txt"),
@@ -234,8 +327,15 @@ Once loaded, the dashboard displays your Bio-Intelligence Summary:
         ])
         
         if not f_path: return
+        self.start_processing_thread(f_path)
 
-        self.upload_btn.configure(state="disabled", text="Processing...")
+    def start_processing_thread(self, f_path):
+        self.upload_btn.configure(state="disabled")
+        if hasattr(self, 'fetch_ncbi_btn'):
+            self.fetch_ncbi_btn.configure(state="disabled")
+        if hasattr(self, 'batch_btn'):
+            self.batch_btn.configure(state="disabled")
+            
         self.loading_bar.pack(pady=(0, 10), padx=20)
         self.loading_bar.start()
         self.status_label.configure(text="Analyzing Bio-Data...", text_color="#f1c40f")
@@ -246,7 +346,6 @@ Once loaded, the dashboard displays your Bio-Intelligence Summary:
             try:
                 if self.analyzer.parse_fasta(f_path):
                     if self.analyzer.calculate_metrics():
-                        self.db.insert_log(self.session_id, os.path.basename(f_path), self.analyzer.total_length, self.analyzer.gc_percentage)
                         success = True
                     else:
                         error_msg = "Calculations failed. File data may be corrupted."
@@ -262,8 +361,43 @@ Once loaded, the dashboard displays your Bio-Intelligence Summary:
 
     def check_queue(self):
         try:
-            result = self.thread_queue.get_nowait()
-            self.finish_processing(result["success"], result["path"], result["error"])
+            while True:
+                result = self.thread_queue.get_nowait()
+                if "type" in result:
+                    if result["type"] == "fetch_success":
+                        self.fetch_ncbi_btn.configure(text="Fetch NCBI Sequence", state="normal")
+                        self.start_processing_thread(result["path"])
+                    elif result["type"] == "fetch_error":
+                        self.loading_bar.stop()
+                        self.loading_bar.pack_forget()
+                        self.upload_btn.configure(state="normal")
+                        self.fetch_ncbi_btn.configure(state="normal", text="Fetch NCBI Sequence")
+                        if hasattr(self, 'batch_btn'): self.batch_btn.configure(state="normal", text="Batch Process Folder")
+                        self.status_label.configure(text="System Ready", text_color="white")
+                        messagebox.showerror("Fetch Error", f"Failed to fetch from NCBI:\n\n{result['error']}")
+                    elif result["type"] == "batch_item":
+                        self.db.insert_log(self.session_id, os.path.basename(result["path"]), result["length"], result["gc"])
+                    elif result["type"] == "batch_done":
+                        self.loading_bar.stop()
+                        self.loading_bar.pack_forget()
+                        self.upload_btn.configure(state="normal")
+                        if hasattr(self, 'fetch_ncbi_btn'): self.fetch_ncbi_btn.configure(state="normal")
+                        if hasattr(self, 'batch_btn'): self.batch_btn.configure(state="normal", text="Batch Process Folder")
+                        
+                        self.refresh_history()
+                        self.status_label.configure(text=f"Batch Finished: {result['count']} success", text_color="#2ecc71")
+                        
+                        if result["errors"]:
+                            err_str = "\n".join(result["errors"][:10])
+                            if len(result["errors"]) > 10: err_str += f"\n...and {len(result['errors'])-10} more."
+                            messagebox.showwarning("Batch Finished with Errors", f"Processed {result['count']} files.\n\nErrors:\n{err_str}")
+                        else:
+                            messagebox.showinfo("Batch Complete", f"Successfully processed {result['count']} genomic files.")
+                            
+                        if result["last_path"] and result["count"] > 0:
+                            self.update_ui(os.path.basename(result["last_path"]))
+                else:
+                    self.finish_processing(result["success"], result["path"], result["error"])
         except queue.Empty:
             self.after(100, self.check_queue)
 
@@ -271,8 +405,12 @@ Once loaded, the dashboard displays your Bio-Intelligence Summary:
         self.loading_bar.stop()
         self.loading_bar.pack_forget() 
         self.upload_btn.configure(state="normal", text="Analyze Sequence")
+        if hasattr(self, 'fetch_ncbi_btn'):
+            self.fetch_ncbi_btn.configure(state="normal", text="Fetch NCBI Sequence")
 
         if success:
+            # DB write is now safely happening on the main thread
+            self.db.insert_log(self.session_id, os.path.basename(f_path), self.analyzer.total_length, self.analyzer.gc_percentage)
             self.update_ui(os.path.basename(f_path))
             self.refresh_history()
         else:

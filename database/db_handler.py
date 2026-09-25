@@ -7,7 +7,7 @@ class DatabaseHandlerDAL:
         self.db_path = os.path.join(os.path.dirname(__file__), db_name)
 
     def connect(self):
-        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        self.conn = sqlite3.connect(self.db_path)
         self.curr = self.conn.cursor()
         self.curr.execute('CREATE TABLE IF NOT EXISTS Logs (ID INTEGER PRIMARY KEY, SID TEXT, File TEXT, Length INTEGER, GC REAL, Date TIMESTAMP)')
         self.conn.commit()
