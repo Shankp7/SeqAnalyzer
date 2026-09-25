@@ -23,6 +23,7 @@ from tkinter import filedialog, messagebox
 from core.seq_analyzer import SequenceAnalyzerBLL
 from database.db_handler import DatabaseHandlerDAL
 from reports.pdf_generator import ReportGenerator
+from reports.html_generator import HTMLReportGenerator
 
 ctk.set_appearance_mode("dark") 
 ctk.set_default_color_theme("green") 
@@ -45,6 +46,7 @@ class MainWindowUI(ctk.CTk):
         self.db.connect()
         self.session_id = self.db.start_session()
         self.reporter = ReportGenerator()
+        self.html_reporter = HTMLReportGenerator()
 
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -136,12 +138,14 @@ class MainWindowUI(ctk.CTk):
         
         self.pdf_btn = ctk.CTkButton(self.btn_f, text="PDF Report", command=self.save_report, state="disabled")
         self.pdf_btn.grid(row=0, column=0, padx=5)
+        self.html_btn = ctk.CTkButton(self.btn_f, text="HTML Report", command=self.save_html_report, state="disabled", fg_color="#e67e22")
+        self.html_btn.grid(row=0, column=1, padx=5)
         self.viz_btn = ctk.CTkButton(self.btn_f, text="Visualize", command=self.show_visuals, state="disabled", fg_color="#3498db")
-        self.viz_btn.grid(row=0, column=1, padx=5)
+        self.viz_btn.grid(row=0, column=2, padx=5)
         self.csv_btn = ctk.CTkButton(self.btn_f, text="Export CSV", command=self.export_csv, state="disabled")
-        self.csv_btn.grid(row=0, column=2, padx=5)
+        self.csv_btn.grid(row=0, column=3, padx=5)
         self.copy_btn = ctk.CTkButton(self.btn_f, text="Copy", border_width=1, command=self.copy_to_clipboard, state="disabled")
-        self.copy_btn.grid(row=0, column=3, padx=5)
+        self.copy_btn.grid(row=0, column=4, padx=5)
 
     def setup_history_tab(self):
         h_frame = self.tabs.tab("History Logs")
@@ -205,19 +209,17 @@ Once loaded, the dashboard displays your Bio-Intelligence Summary:
 
     def clear_dashboard(self):
         """Resets all UI elements and action buttons to their default state."""
-        # 1. Clear the researcher inputs (clearing name_var auto-disables the upload button via validation)
         self.name_var.set("")
         self.id_entry.delete(0, 'end')
         
-        # 2. Reset the main text box
         self.metrics_box.delete("0.0", "end")
         
-        # 3. Reset the Title Label text back to default
         self.status_label.configure(text="System Ready", text_color="white")
         
-        # 4. Disable the action buttons to prevent exporting empty reports
-        for b in [self.pdf_btn, self.viz_btn, self.csv_btn, self.copy_btn]:
-            b.configure(state="disabled")
+        for b in [self.pdf_btn, self.html_btn, self.viz_btn, self.csv_btn, self.copy_btn]:
+            if hasattr(self, 'html_btn') or b is not None:
+                try: b.configure(state="disabled")
+                except: pass
 
     def show_visuals(self):
         plt.close('all') 
@@ -434,7 +436,34 @@ Once loaded, the dashboard displays your Bio-Intelligence Summary:
         self.metrics_box.delete("0.0", "end")
         self.metrics_box.insert("0.0", res)
         
-        for b in [self.pdf_btn, self.viz_btn, self.csv_btn, self.copy_btn]: b.configure(state="normal")
+        for b in [self.pdf_btn, self.html_btn, self.viz_btn, self.csv_btn, self.copy_btn]: 
+            try: b.configure(state="normal")
+            except: pass
+
+    def save_html_report(self):
+        s_path = filedialog.asksaveasfilename(defaultextension=".html", filetypes=[("HTML Document", "*.html")])
+        if not s_path: return
+        
+        stability_val = "High" if self.analyzer.gc_percentage > 55 else "Moderate" if self.analyzer.gc_percentage > 40 else "Low"
+        
+        r_data = {
+            'id': self.analyzer.sequence_id, 'length': self.analyzer.total_length, 
+            'gc': self.analyzer.gc_percentage, 'tm_w': self.analyzer.tm_wallace, 
+            'tm_s': self.analyzer.tm_salt, 'sites': self.analyzer.restriction_sites, 
+            'protein': self.analyzer.protein_seq, 'entropy': self.analyzer.entropy,
+            'weight': self.analyzer.mol_weight, 
+            'invalid': self.analyzer.invalid_count,  
+            'stability': stability_val,
+            'counts': self.analyzer.counts
+        }
+        
+        try:
+            self.html_reporter.generate_html_report(r_data, self.name_entry.get(), self.id_entry.get(), s_path)
+            if messagebox.askyesno("Success", "Interactive HTML Generated! Open in browser?"):
+                import webbrowser
+                webbrowser.open('file://' + os.path.realpath(s_path))
+        except Exception as e:
+            messagebox.showerror("Export Error", f"Failed to save HTML:\n{str(e)}")
 
     def save_report(self):
         s_path = filedialog.asksaveasfilename(defaultextension=".pdf")
