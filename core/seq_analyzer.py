@@ -26,10 +26,15 @@ class SequenceAnalyzerBLL:
             raise Exception("File does not exist.")
         self.file_path = file_path
         
+        is_fastq = file_path.lower().endswith(('.fastq', '.fq'))
+
         with open(file_path, 'r') as f:
             for line in f:
                 line = line.strip()
-                if line.startswith('>'):
+                if is_fastq and line.startswith('@'):
+                    self.sequence_id = line[1:].split()[0]
+                    break
+                elif line.startswith('>'):
                     self.sequence_id = line[1:].split()[0]
                     break
                 elif line and not line.startswith((';', '!', '#')):
@@ -61,52 +66,53 @@ class SequenceAnalyzerBLL:
         bamhi_positions = []
         
         current_pos = 0 # tracks position in the purely valid DNA sequence
-        
-        with open(self.file_path, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith(('>', ';', '!', '#')):
-                    continue
-                
-                raw_chunk = line.upper()
-                total_length += len(raw_chunk)
-                
-                # filter invalid bases
-                chunk = "".join(c for c in raw_chunk if c in 'ATGC')
-                invalid_count += len(raw_chunk) - len(chunk)
-                
-                if not chunk: continue
-                
-                for b in chunk:
-                    counts[b] += 1
-                    
-                if len(first_600_bases) < 600:
-                    first_600_bases.append(chunk)
-                
-                search_seq = buffer + chunk
-                
-                def find_all(sub, s, offset):
-                    res = []
-                    idx = s.find(sub)
-                    while idx != -1:
-                        # 1-indexed to match Bio.Restriction output formatting
-                        res.append(offset + idx + 1)
-                        idx = s.find(sub, idx + 1)
-                    return res
+        def find_all(sub, s, offset):
+            res = []
+            idx = s.find(sub)
+            while idx != -1:
+                res.append(offset + idx + 1)
+                idx = s.find(sub, idx + 1)
+            return res
 
-                # Adjust offset for the search_seq relative to the global valid sequence length
-                offset = current_pos - len(buffer)
+        def process_chunk(raw_chunk):
+            nonlocal total_length, invalid_count, current_pos, buffer
+            raw_chunk = raw_chunk.upper()
+            total_length += len(raw_chunk)
+            
+            chunk = "".join(c for c in raw_chunk if c in 'ATGC')
+            invalid_count += len(raw_chunk) - len(chunk)
+            
+            if not chunk: return
+            
+            for b in chunk: counts[b] += 1
                 
-                # Cap storing positions to avoid memory blowup on GB-sized files
-                if len(ecori_positions) < 1000:
-                    ecori_positions.extend(find_all("GAATTC", search_seq, offset))
-                if len(hindiii_positions) < 1000:
-                    hindiii_positions.extend(find_all("AAGCTT", search_seq, offset))
-                if len(bamhi_positions) < 1000:
-                    bamhi_positions.extend(find_all("GGATCC", search_seq, offset))
-                
-                current_pos += len(chunk)
-                buffer = search_seq[-5:] if len(search_seq) >= 5 else search_seq
+            if len(first_600_bases) < 600:
+                first_600_bases.append(chunk)
+            
+            search_seq = buffer + chunk
+            offset = current_pos - len(buffer)
+            
+            if len(ecori_positions) < 1000: ecori_positions.extend(find_all("GAATTC", search_seq, offset))
+            if len(hindiii_positions) < 1000: hindiii_positions.extend(find_all("AAGCTT", search_seq, offset))
+            if len(bamhi_positions) < 1000: bamhi_positions.extend(find_all("GGATCC", search_seq, offset))
+            
+            current_pos += len(chunk)
+            buffer = search_seq[-5:] if len(search_seq) >= 5 else search_seq
+
+        is_fastq = self.file_path.lower().endswith(('.fastq', '.fq'))
+
+        if is_fastq:
+            from Bio.SeqIO.QualityIO import FastqGeneralIterator
+            with open(self.file_path, 'r') as f:
+                for title, seq, qual in FastqGeneralIterator(f):
+                    process_chunk(seq)
+        else:
+            with open(self.file_path, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith(('>', ';', '!', '#')):
+                        continue
+                    process_chunk(line)
 
         valid_length = current_pos
         if valid_length == 0:

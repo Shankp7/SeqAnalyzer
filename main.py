@@ -273,7 +273,7 @@ Once loaded, the dashboard displays your Bio-Intelligence Summary:
         d_path = filedialog.askdirectory()
         if not d_path: return
         
-        valid_exts = ('.fasta', '.fa', '.fna', '.txt')
+        valid_exts = ('.fasta', '.fa', '.fna', '.txt', '.fastq', '.fq')
         files = [os.path.join(d_path, f) for f in os.listdir(d_path) if f.lower().endswith(valid_exts)]
         
         if not files:
@@ -322,7 +322,7 @@ Once loaded, the dashboard displays your Bio-Intelligence Summary:
 
     def open_file_dialog(self):
         f_path = filedialog.askopenfilename(filetypes=[
-            ("Genomic Files", "*.fasta *.fa *.fna *.txt"),
+            ("Genomic Files", "*.fasta *.fa *.fna *.txt *.fastq *.fq"),
             ("All Files", "*.*")
         ])
         
