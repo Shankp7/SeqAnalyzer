@@ -32,8 +32,8 @@ The application is built using a modular architecture that cleanly separates the
 Below is a breakdown of the core workflows within the utility:
 
 ### Step 1: Data Ingestion
-* **Local Upload:** Select a local `.fasta` file through the dashboard file picker.
-* **Batch Directory Upload:** Select a folder to instantly queue and process all valid biological text files within it.
+* **Local Upload:** Select a local sequence file (`.fasta`, `.fa`, `.fna`, `.txt`, `.fastq`, `.fq`) through the dashboard file picker.
+* **Batch Directory Upload:** Select a folder to instantly queue and process all valid biological text and NGS format files within it.
 * **Remote Fetch:** Enter an NCBI Accession ID to automatically download and process a sequence directly from the global repository.
 
 ### Step 2: Sequence Analysis
