@@ -23,6 +23,7 @@ The application is built using a modular architecture that cleanly separates the
 
 ### 4. Automated Reporting
 * **PDF Export:** Generates clean, publication-ready bioinformatics reports automatically.
+* **Interactive HTML Export:** Generates standalone, interactive Web-Based reports using Plotly. Researchers can view nucleotide distribution dynamically in any web browser.
 * **Offline Sharing:** Reports are saved directly to the local file system for immediate offline review or distribution.
 
 ---
